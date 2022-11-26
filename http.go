@@ -5,14 +5,22 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
+	"vecache/consistenthash"
 )
 
 type HTTPPool struct {
-	self     string
-	basePath string
+	self        string
+	basePath    string
+	mutex       sync.Mutex
+	peers       *consistenthash.Map
+	httpGetters map[string]*HTTPGetter
 }
 
-const defaultBasePath = "/vecache/"
+const (
+	defaultBasePath = "/vecache/"
+	defaultReplicas = 50
+)
 
 func NewHTTPPool(self string) *HTTPPool {
 	return &HTTPPool{
@@ -65,3 +73,32 @@ func (p *HTTPPool) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 	writer.Header().Set("Content-Type", "application/octet-stream")
 	writer.Write(byteView.ByteSlice())
 }
+
+// 添加远程节点
+func (p *HTTPPool) Set(peers ...string) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	p.peers = consistenthash.New(defaultReplicas, nil)
+	p.peers.Add(peers...)
+
+	p.httpGetters = make(map[string]*HTTPGetter, len(peers))
+
+	for _, peer := range peers {
+		p.httpGetters[peer] = &HTTPGetter{baseURL: peer + p.basePath}
+	}
+}
+
+// 选取远程节点
+func (p *HTTPPool) PickPeer(key string) (PeerGetter, bool) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	if peer := p.peers.Get(key); peer != "" && peer != p.self {
+		p.Log("Pick peer %s", peer)
+		return p.httpGetters[peer], true
+	}
+	return nil, false
+}
+
+var _ PeerPicker = (*HTTPPool)(nil)
