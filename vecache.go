@@ -73,13 +73,13 @@ func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
 	return g
 }
 
-func GetGroup(name string) *Group {
+func GetGroup(name string) (*Group, error) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
 	if g, ok := groups[name]; ok {
-		return g
+		return g, nil
 	} else {
-		return nil
+		return nil, fmt.Errorf("Unknown Group")
 	}
 }
