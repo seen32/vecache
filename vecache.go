@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"vecache/singleflight"
 )
 
 type Getter interface {
@@ -24,6 +25,8 @@ type Group struct {
 	mainCache cache
 
 	peers PeerPicker
+	// 每个key只请求一次
+	loader *singleflight.Group
 }
 
 func (g *Group) Get(key string) (ByteView, error) {
@@ -54,16 +57,22 @@ func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
 }
 
 func (g *Group) load(key string) (value ByteView, err error) {
-	// 选择节点
-	if g.peers != nil {
-		if peer, ok := g.peers.PickPeer(key); ok {
-			if view, err := g.getFromPeer(peer, key); err == nil {
-				return view, nil
+	v, err := g.loader.Do(key, func() (interface{}, error) {
+		// 选择节点
+		if g.peers != nil {
+			if peer, ok := g.peers.PickPeer(key); ok {
+				if view, err := g.getFromPeer(peer, key); err == nil {
+					return view, nil
+				}
 			}
 		}
-	}
+		return g.getLocally(key)
+	})
 
-	return g.getLocally(key)
+	if err != nil {
+		return v.(ByteView), nil
+	}
+	return
 }
 
 func (g *Group) getLocally(key string) (ByteView, error) {
@@ -94,6 +103,7 @@ func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
 		name:      name,
 		getter:    getter,
 		mainCache: cache{cacheBytes: cacheBytes},
+		loader:    &singleflight.Group{},
 	}
 	groups[name] = g
 	return g
