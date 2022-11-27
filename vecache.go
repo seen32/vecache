@@ -22,6 +22,8 @@ type Group struct {
 	name      string
 	getter    Getter
 	mainCache cache
+
+	peers PeerPicker
 }
 
 func (g *Group) Get(key string) (ByteView, error) {
@@ -32,11 +34,35 @@ func (g *Group) Get(key string) (ByteView, error) {
 		log.Println("[VeCache] hit")
 		return v, nil
 	}
-	// 如果没有缓存，从数据源获取缓存
+	// 如果没有缓存，从[远程节点]或者[数据源]中获取缓存
 	return g.load(key)
 }
 
+func (g *Group) RegisterPeers(peers PeerPicker) {
+	if g.peers != nil {
+		panic("RegisterPeerPicker called more than once")
+	}
+	g.peers = peers
+}
+
+func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	bytes, err := peer.Get(g.name, key)
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{b: bytes}, nil
+}
+
 func (g *Group) load(key string) (value ByteView, err error) {
+	// 选择节点
+	if g.peers != nil {
+		if peer, ok := g.peers.PickPeer(key); ok {
+			if view, err := g.getFromPeer(peer, key); err == nil {
+				return view, nil
+			}
+		}
+	}
+
 	return g.getLocally(key)
 }
 

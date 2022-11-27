@@ -34,8 +34,8 @@ func (p *HTTPPool) Log(format string, v ...interface{}) {
 }
 
 func (p *HTTPPool) Start() {
-	http.ListenAndServe(p.self, p)
 	log.Println("VeCache is running at " + p.self)
+	log.Fatal(http.ListenAndServe(p.self, p))
 }
 
 func (p *HTTPPool) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -94,7 +94,7 @@ func (p *HTTPPool) PickPeer(key string) (PeerGetter, bool) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	if peer := p.peers.Get(key); peer != "" && peer != p.self {
+	if peer := p.peers.Get(key); peer != "" && peer[7:] != p.self {
 		p.Log("Pick peer %s", peer)
 		return p.httpGetters[peer], true
 	}
