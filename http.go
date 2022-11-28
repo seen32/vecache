@@ -7,6 +7,9 @@ import (
 	"strings"
 	"sync"
 	"vecache/consistenthash"
+	"vecache/pack"
+
+	"github.com/golang/protobuf/proto"
 )
 
 type HTTPPool struct {
@@ -70,8 +73,15 @@ func (p *HTTPPool) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 		http.Error(writer, "Unknown key", http.StatusInternalServerError)
 	}
 
+	body, err := proto.Marshal(&pack.Response{Value: byteView.ByteSlice()})
+	if err != nil {
+		http.Error(writer, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	writer.Header().Set("Content-Type", "application/octet-stream")
-	writer.Write(byteView.ByteSlice())
+
+	writer.Write(body)
 }
 
 // 添加远程节点

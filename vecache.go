@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"vecache/pack"
 	"vecache/singleflight"
 )
 
@@ -48,12 +49,27 @@ func (g *Group) RegisterPeers(peers PeerPicker) {
 	g.peers = peers
 }
 
-func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
-	bytes, err := peer.Get(g.name, key)
+func (g *Group) getFromPeer1(peer PeerGetter, key string) (ByteView, error) {
+	request := pack.Request{Group: g.name, Key: key}
+	response, err := peer.Get1(request)
 	if err != nil {
 		return ByteView{}, err
 	}
-	return ByteView{b: bytes}, nil
+	return ByteView{b: response.Value}, nil
+}
+
+func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	req := &pack.Request{
+		Group: g.name,
+		Key:   key,
+	}
+
+	res := &pack.Response{}
+	err := peer.Get(req, res)
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{b: res.Value}, nil
 }
 
 func (g *Group) load(key string) (value ByteView, err error) {
